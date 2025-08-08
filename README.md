@@ -91,3 +91,74 @@ For open source projects, say how it is licensed.
 
 ## Project status
 If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+
+
+## Branching Strategy
+
+[Branches]
+main → Production-ready code. Only release and hotfix merges here.
+
+release/x.y → Pre-production release staging branch.
+
+dev → Integration branch, always deploys to dev environment automatically.
+
+feature/xyz → Temporary branch for new features.
+
+hotfix/xyz → Critical fixes to production code.
+
+[Flow Example]
+- Feature Development
+    dev  <--- merge PR from feature branch
+    feature/login-feature ---> dev
+    (dev branch deploys to DEV environment automatically)
+
+- Release
+    dev ---> release/1.2  (manual deployment to Staging/UAT)
+    release/1.2 ---> main (production release)
+
+- Hotfix
+    main ---> hotfix/payment-bug
+    hotfix/payment-bug ---> main (immediate prod deployment)
+    hotfix/payment-bug ---> dev (keep dev updated)
+
+[Hotfix]
+
+Flow A: 
+
+main → hotfix/payment-bug
+hotfix/payment-bug → main (deploy to prod immediately)
+hotfix/payment-bug → dev (sync dev branch)
+hotfix/payment-bug → release/x.y (if an active staging release exists)
+
+Flow B:
+Hotfix goes to dev → staging → prod in sequence.
+
+## Scanning tool selection
+
+For a Java + IaC project, here’s how I’d choose:
+
+Scan Type	            Purpose	                                Tool Choices	                        Notes
+Static Code Analysis	Detect bugs, bad patterns in Java code	SpotBugs, PMD, Checkstyle, SonarQube	SonarQube is most comprehensive (code + quality gate)
+
+Code Style Scan	        Enforce code style & formatting	        Checkstyle, PMD	                        Works well in pre-commit or CI
+
+SCA (Dependency Scan)	Check for vulnerabilities in dependencies	OWASP Dependency-Check, Snyk	Snyk integrates well with GitLab
+
+Container Image Scan	Find vulnerabilities in Docker image packages	Trivy, Anchore, Grype	        Trivy is lightweight & free
+
+IaC Security Scan	    Check Terraform, Ansible, K8s YAML for misconfigurations	Checkov, tfsec, Terrascan	Checkov has broad IaC coverage
+
+Secret Detection	    Prevent API keys/passwords from entering repo	GitLab Secret Detection, TruffleHog	Enable GitLab’s built-in detection
+
+Quality Gates	        Block merge if scan fails criteria	SonarQube, GitLab Code Quality	            SonarQube can enforce
+
+
+
+Balanced stack example for interview:
+Static code: SonarQube + SpotBugs
+Style: Checkstyle
+Dependency scan: Snyk
+Container scan: Trivy
+IaC scan: Checkov
+Secrets: GitLab built-in
+

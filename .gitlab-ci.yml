@@ -1,0 +1,118 @@
+stages:                          # Defines the CI/CD stages in order
+  - build
+  - scan
+  - package
+  - test
+  - deploy
+
+include:
+  - local: 'cd/deploy.yml'
+
+
+variables:                       # Variables available to all jobs
+  DOCKER_IMAGE: "marcoliew/gl-java-app"  # Docker image name
+  MAVEN_CLI_OPTS: "-B -e -V"     # Maven flags for better CI logging
+
+# ---------- BUILD STAGE ----------
+build_app:
+  stage: build                   # Assigns this job to the "build" stage
+  image: maven:3.9.4-eclipse-temurin-17 # Use Maven image with JDK 17
+  script:                        # Commands to run
+    - bash scripts/build.sh
+    # - cd app
+    # - mvn $MAVEN_CLI_OPTS clean package
+  artifacts:                     # Keep build outputs for later stages
+    paths:
+      - app/target/*.jar
+
+# ---------- SCAN STAGE ----------
+static_code_scan:
+  stage: scan
+  script:
+    - cd app
+    - mvn spotbugs:spotbugs      # Static code analysis
+  allow_failure: true            # Won't break pipeline if it fails
+
+sonarqube_scan:
+  stage: scan
+  image: maven:3.9.4-eclipse-temurin-17
+  script:
+    - bash scripts/sonarqube_scan.sh
+  allow_failure: false
+
+snyk_scan:
+  stage: scan
+  image: snyk/snyk:docker
+  script:
+    - snyk auth ${SNYK_TOKEN}
+    - snyk test --file=app/pom.xml --severity-threshold=high
+  allow_failure: true
+
+trivy_scan:
+  stage: scan
+  image: aquasec/trivy:latest    # Use Trivy Docker image
+  script:
+    - bash scripts/trivy_scan.sh
+    # - trivy fs --exit-code 0 --severity HIGH,CRITICAL app/ # Scan filesystem
+    # - trivy image --exit-code 0 --severity HIGH,CRITICAL $DOCKER_IMAGE:latest # Scan image
+  allow_failure: true
+
+checkov_scan:
+  stage: scan
+  image: bridgecrew/checkov:latest
+  script:
+    - bash scripts/checkov_scan.sh
+  allow_failure: false
+
+# ---------- PACKAGE STAGE ----------
+package_docker:
+  stage: package
+  script:
+    - docker build -t $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA app/
+    - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+    - docker push $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker tag $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA $DOCKER_IMAGE:latest
+    - docker push $DOCKER_IMAGE:latest
+  only:
+    - dev
+    - release/*
+    - main
+
+# ---------- TEST STAGE ----------
+run_tests:
+  stage: test
+  script:
+    - cd app
+    - mvn test                   # Runs unit tests
+
+# ---------- DEPLOY STAGE ----------
+deploy_dev:
+  stage: deploy
+  script:
+    - bash scripts/deploy_dev.sh
+  environment:
+    name: dev
+  only:
+    - dev                        # Auto deploy on dev branch merge
+
+deploy_staging:
+  stage: deploy
+  script:
+    - echo "Deploying to Staging..."
+    - cd infra/terraform && terraform init && terraform apply -auto-approve -var env=staging
+  environment:
+    name: staging
+  only:
+    - release/*
+  when: manual                   # Requires manual trigger
+
+deploy_prod:
+  stage: deploy
+  script:
+    - echo "Deploying to Production..."
+    - cd infra/terraform && terraform init && terraform apply -auto-approve -var env=prod
+  environment:
+    name: production
+  only:
+    - main
+  when: manual
