@@ -5,11 +5,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.example</groupId>
-    <artifactId>my-java-app</artifactId>
+    <artifactId>gl-java-app</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
-    <name>My Java App</name>
+    <name>GitLab Java App</name>
 
     <properties>
         <java.version>17</java.version>

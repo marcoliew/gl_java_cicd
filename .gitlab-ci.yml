@@ -12,6 +12,7 @@ include:
 variables:                       # Variables available to all jobs
   DOCKER_IMAGE: "marcoliew/gl-java-app"  # Docker image name
   MAVEN_CLI_OPTS: "-B -e -V"     # Maven flags for better CI logging
+  KUBECONFIG: "/builds/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/kubeconfig"
 
 # ---------- BUILD STAGE ----------
 build_app:
@@ -67,16 +68,24 @@ checkov_scan:
 # ---------- PACKAGE STAGE ----------
 package_docker:
   stage: package
+  image: docker:25.0.3
+  services:
+    - docker:25.0.3-dind
   script:
-    - docker build -t $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA app/
-    - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-    - docker push $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA
-    - docker tag $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA $DOCKER_IMAGE:latest
-    - docker push $DOCKER_IMAGE:latest
+    - bash scripts/package_docker.sh
+    # - docker build -t $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA app/
+    # - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+    # - docker push $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA
+    # - docker tag $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA $DOCKER_IMAGE:latest
+    # - docker push $DOCKER_IMAGE:latest
   only:
     - dev
     - release/*
     - main
+  artifacts:
+    expire_in: 1 week
+    reports:
+      dotenv: image.env
 
 # ---------- TEST STAGE ----------
 run_tests:
@@ -88,10 +97,15 @@ run_tests:
 # ---------- DEPLOY STAGE ----------
 deploy_dev:
   stage: deploy
+  image: bitnami/kubectl:1.29  
   script:
-    - bash scripts/deploy_dev.sh
+    - IMAGE_TAG=$CI_COMMIT_SHORT_SHA
+    - envsubst < k8s/dev/deployment.yaml | kubectl apply -f -  
+  #  - bash scripts/deploy_k8s.sh
   environment:
     name: dev
+    # url: https://dev.example.com
+  when: on_success
   only:
     - dev                        # Auto deploy on dev branch merge
 
